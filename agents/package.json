@@ -1,0 +1,26 @@
+{
+  "name": "@clearprice/agents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "dev": "npx adk web src/orchestrator.ts",
+    "run": "npx adk run",
+    "build": "tsc",
+    "deploy": "npx adk deploy cloud_run src/index.ts --project $GCP_PROJECT_ID --region $VERTEX_AI_LOCATION --allow-unauthenticated",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@google/adk": "^0.5.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@google/adk-devtools": "^1.1.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}

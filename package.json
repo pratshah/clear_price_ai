@@ -1,0 +1,21 @@
+{
+  "name": "clearprice",
+  "private": true,
+  "workspaces": [
+    "mcp-server",
+    "agents",
+    "api",
+    "frontend",
+    "ingestion"
+  ],
+  "scripts": {
+    "dev:mcp": "npm run dev --workspace=mcp-server",
+    "dev:api": "npm run dev --workspace=api",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

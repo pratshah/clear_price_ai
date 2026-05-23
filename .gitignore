@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+.env.local
+.next/
+*.log
+.DS_Store
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# Local AI assistant files
+CLAUDE.md
+.claude/
+DEVPOST_SUBMISSION.md

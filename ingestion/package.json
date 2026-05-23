@@ -1,0 +1,32 @@
+{
+  "name": "@clearprice/ingestion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo 'No build needed'",
+    "ingest:inpatient": "tsx src/inpatient-sync.ts",
+    "ingest:outpatient": "tsx src/outpatient-sync.ts",
+    "ingest:asc": "tsx src/asc-sync.ts",
+    "ingest:hospitals": "tsx src/hospital-compare-sync.ts",
+    "ingest:leapfrog": "tsx src/leapfrog-sync.ts",
+    "ingest:costs": "tsx src/cost-report-sync.ts",
+    "ingest:npi": "tsx src/npi-sync.ts",
+    "ingest:doctors": "tsx src/doctors-sync.ts",
+    "ingest:places": "tsx src/places-sync.ts",
+    "ingest:embed": "tsx src/embed-procedures.ts",
+    "ingest:all": "npm run ingest:inpatient && npm run ingest:outpatient && npm run ingest:asc && npm run ingest:hospitals && npm run ingest:leapfrog && npm run ingest:costs && npm run ingest:npi && npm run ingest:doctors && npm run ingest:places && npm run ingest:embed"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.0",
+    "dotenv": "^17.3.1",
+    "mongodb": "^6.0.0",
+    "node-fetch": "^3.3.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0"
+  }
+}
