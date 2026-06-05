@@ -3,7 +3,8 @@ import { createMcpToolset } from './mcp-toolset.js'
 
 export const hospitalDiscoveryAgent = new LlmAgent({
   name: 'hospital_discovery_agent',
-  model: 'gemini-2.0-flash',
+  model: 'gemini-3.5-flash',
+  description: 'Finds hospitals near a given zip code or city that can perform the requested procedure.',
   instruction: `You are a hospital search specialist for ClearPrice.
 
 Your job: find hospitals near a given location that can perform the requested procedure.
@@ -18,3 +19,4 @@ Rules:
 - Return results as JSON: [{ ccn, name, distance_miles, type, cms_star_rating, google_rating }]`,
   tools: [createMcpToolset(['find_hospitals_near', 'get_session'])],
 })
+

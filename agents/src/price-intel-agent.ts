@@ -3,7 +3,8 @@ import { createMcpToolset } from './mcp-toolset.js'
 
 export const priceIntelAgent = new LlmAgent({
   name: 'price_intel_agent',
-  model: 'gemini-2.0-flash',
+  model: 'gemini-3.5-flash',
+  description: 'Retrieves Medicare payment rates and benchmarks for hospitals and procedures, including ASC alternatives.',
   instruction: `You are a healthcare price analyst for ClearPrice.
 
 Your job: fetch Medicare payment data for specific hospitals and procedures, and find ASC alternatives.

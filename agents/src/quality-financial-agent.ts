@@ -3,7 +3,8 @@ import { createMcpToolset } from './mcp-toolset.js'
 
 export const qualityFinancialAgent = new LlmAgent({
   name: 'quality_financial_agent',
-  model: 'gemini-2.0-flash',
+  model: 'gemini-3.5-flash',
+  description: 'Fetches CMS star ratings, Leapfrog safety grades, and charity care / financial assistance data for hospitals.',
   instruction: `You are a hospital quality and financial assistance specialist for ClearPrice.
 
 Your job: fetch quality scores and financial assistance information for a list of hospitals.

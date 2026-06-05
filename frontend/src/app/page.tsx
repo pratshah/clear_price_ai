@@ -383,7 +383,7 @@ export default function LandingPage() {
             {/* Orchestrator */}
             <div className="bg-violet-100 border-2 border-violet-400 rounded-xl px-8 py-4 text-center shadow-lg">
               <div className="text-xs font-bold text-violet-500 uppercase tracking-wider mb-1">Orchestrator Agent</div>
-              <div className="text-sm font-bold text-violet-900">Gemini 2.5 Pro — Vertex AI Agent Runtime</div>
+              <div className="text-sm font-bold text-violet-900">Gemini 3.5 Flash — Vertex AI Agent Runtime</div>
               <div className="text-xs text-violet-600 mt-0.5">Decomposes query → dispatches sub-agents in parallel → synthesizes</div>
             </div>
             <ArrowDown label="parallel dispatch" dark={false} />
@@ -464,7 +464,7 @@ export default function LandingPage() {
           <SectionHeading
             eyebrow="Multi-Agent System"
             title="5 Specialized AI Agents"
-            subtitle="Each agent is a Gemini 2.5 Pro specialist with a focused job and access only to the tools it needs."
+            subtitle="Each agent is a Gemini 3.5 Flash specialist with a focused job and access only to the tools it needs."
           />
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1244,7 +1244,7 @@ export default function LandingPage() {
           {/* Tech badges */}
           <div className="flex flex-wrap justify-center gap-2 mt-12">
             {[
-              'Google ADK', 'Gemini 2.5 Pro', 'Vertex AI Agent Runtime',
+              'Google ADK', 'Gemini 3.5 Flash', 'Vertex AI Agent Runtime',
               'MongoDB Atlas', 'Atlas Vector Search', 'Custom MCP Server',
               'Hono.js', 'Next.js 14', 'Cloud Run',
             ].map((tech) => (

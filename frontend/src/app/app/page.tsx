@@ -62,9 +62,29 @@ export default function HomePage() {
   const [insightsProcedure, setInsightsProcedure] = useState<{ code: string; type: string } | null>(null)
   const [mapLoading, setMapLoading] = useState(false)
   const [tableLoading, setTableLoading] = useState(false)
+  const [chatLoading, setChatLoading] = useState(false)
   const [medicarePlan, setMedicarePlan] = useState<'original' | 'plan_g' | 'plan_f' | 'uninsured'>('original')
   const lastUserQuery = useRef<string>('')
   const currentHospitalsRef = useRef<Hospital[]>([])
+  // Buffer right-panel updates so they land at the same time as the chat response
+  const pendingHospitalsRef = useRef<Hospital[] | null>(null)
+  const pendingPriceRef = useRef<{ prices: HospitalPrice[]; meta: NonNullable<typeof pricesMeta>; proc: { code: string; type: string } } | null>(null)
+
+  const flushPending = useCallback(() => {
+    if (pendingHospitalsRef.current) {
+      setHospitals(pendingHospitalsRef.current)
+      currentHospitalsRef.current = pendingHospitalsRef.current
+      pendingHospitalsRef.current = null
+    }
+    if (pendingPriceRef.current) {
+      const { prices: p, meta, proc } = pendingPriceRef.current
+      setPrices(p)
+      setPricesMeta(meta)
+      setInsightsProcedure(proc)
+      setTab('table')
+      pendingPriceRef.current = null
+    }
+  }, [])
 
   const fetchHospitalsForMap = useCallback(async (zip: string) => {
     setMapLoading(true)
@@ -73,9 +93,9 @@ export default function HomePage() {
       if (!res.ok) return
       const data = await res.json() as { hospitals: Hospital[] }
       if (data.hospitals?.length) {
-        setHospitals(data.hospitals)
+        // Buffer — don't show yet, wait for chat to finish
+        pendingHospitalsRef.current = data.hospitals
         currentHospitalsRef.current = data.hospitals
-        setTab('map')
         return data.hospitals
       }
     } catch {
@@ -95,10 +115,12 @@ export default function HomePage() {
       if (!res.ok) return
       const data = await res.json() as { prices: HospitalPrice[]; procedure_code: string; code_type: string; national_median: number | null }
       if (data.prices?.length) {
-        setPrices(data.prices)
-        setPricesMeta({ procedure_code: data.procedure_code, code_type: data.code_type, national_median: data.national_median })
-        setInsightsProcedure({ code: data.procedure_code, type: data.code_type })
-        setTab('table')
+        // Buffer — don't show yet, wait for chat to finish
+        pendingPriceRef.current = {
+          prices: data.prices,
+          meta: { procedure_code: data.procedure_code, code_type: data.code_type, national_median: data.national_median },
+          proc: { code: data.procedure_code, type: data.code_type },
+        }
       }
     } catch {
       // silent
@@ -109,6 +131,9 @@ export default function HomePage() {
 
   const handleUserSend = useCallback((text: string) => {
     lastUserQuery.current = text
+    // Reset pending buffers for new query
+    pendingHospitalsRef.current = null
+    pendingPriceRef.current = null
     const zip = extractZip(text)
     if (zip) fetchHospitalsForMap(zip)
   }, [fetchHospitalsForMap])
@@ -120,7 +145,10 @@ export default function HomePage() {
       inferProcedureCode(lastUserQuery.current) ??
       inferProcedureCode(content)
 
-    if (!proc) return
+    if (!proc) {
+      flushPending() // still flush hospital map even with no prices
+      return
+    }
 
     // 2. Resolve hospitals: use ref (avoids stale closure), fallback to fetching via zip in response
     let hosps = currentHospitalsRef.current
@@ -135,7 +163,10 @@ export default function HomePage() {
     if (hosps.length) {
       await fetchPriceTable(hosps.map((h) => h.ccn), proc.code, proc.type)
     }
-  }, [fetchHospitalsForMap, fetchPriceTable])
+
+    // Flush buffered right-panel data now that chat has responded
+    flushPending()
+  }, [fetchHospitalsForMap, fetchPriceTable, flushPending])
 
   return (
     <div className="h-screen flex flex-col bg-slate-50">
@@ -162,7 +193,7 @@ export default function HomePage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Chat panel — 40% */}
         <div className="w-2/5 border-r border-slate-200 bg-slate-50 flex flex-col overflow-hidden">
-          <ChatInterface onMessage={handleMessage} onUserSend={handleUserSend} />
+          <ChatInterface onMessage={handleMessage} onUserSend={handleUserSend} onLoadingChange={setChatLoading} />
         </div>
 
         {/* Results panel — 60% */}
@@ -206,11 +237,36 @@ export default function HomePage() {
           </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4 relative">
+            {/* Skeleton overlay while chat is processing */}
+            {chatLoading && (
+              <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-4 p-8">
+                <div className="w-full max-w-sm space-y-3">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-2 h-2 rounded-full bg-brand animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 rounded-full bg-brand animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 rounded-full bg-brand animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <span className="text-sm text-slate-500 ml-1">Fetching results…</span>
+                  </div>
+                  {/* Skeleton rows */}
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="flex items-center gap-3 animate-pulse">
+                      <div className="w-6 h-6 rounded-full bg-slate-200 flex-shrink-0" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-3 bg-slate-200 rounded" style={{ width: `${70 + (i * 7) % 30}%` }} />
+                        <div className="h-2 bg-slate-100 rounded" style={{ width: `${40 + (i * 11) % 30}%` }} />
+                      </div>
+                      <div className="h-3 w-16 bg-slate-200 rounded flex-shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {tab === 'map' && (
               <div className="space-y-4">
                 <HospitalMap hospitals={hospitals} apiKey={MAPS_KEY} />
-                {!hospitals.length && !mapLoading && (
+                {!hospitals.length && !mapLoading && !chatLoading && (
                   <div className="text-center py-8 text-slate-400">
                     <p className="text-sm">Ask ClearPrice about hospital prices near a zip code<br />to see hospitals on the map</p>
                   </div>

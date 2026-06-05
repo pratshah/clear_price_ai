@@ -24,7 +24,7 @@ ClearPrice is a multi-agent AI system that turns that public data into plain-Eng
 | Requirement | Implementation |
 |-------------|---------------|
 | Google Cloud Agent Builder | Google ADK agents deployed to Vertex AI Agent Runtime |
-| Gemini 3 | `gemini-2.5-pro` via Vertex AI |
+| Gemini Models | `gemini-3.5-flash` via Vertex AI |
 | Partner MCP server | Custom MCP server exposing MongoDB Atlas as domain tools |
 | Real-world impact | Hospital price transparency for 100M+ Americans with medical debt |
 
@@ -32,42 +32,103 @@ ClearPrice is a multi-agent AI system that turns that public data into plain-Eng
 
 ## How It Works
 
-```
-You: "Knee replacement near zip 94102?"
-              │
-              ▼
-    ┌─────────────────────┐
-    │    Orchestrator     │  gemini-2.5-pro
-    └──┬──────────────┬───┘
-       │  PARALLEL    │
-       ▼              ▼
- ┌──────────┐  ┌──────────────┐
- │Procedure │  │Hospital      │
- │Agent     │  │Discovery     │
- │NL → DRG/ │  │Geo search    │
- │APC codes │  │near zip      │
- └────┬─────┘  └──────┬───────┘
-      │   PARALLEL    │
-      ▼               ▼
- ┌──────────┐  ┌──────────────┐  ┌──────────┐
- │Price     │  │Quality &     │  │Provider  │
- │Intel     │  │Financial     │  │Agent     │
- │DRG/APC   │  │CMS stars +   │  │Physicians│
- │pricing   │  │charity care  │  │& ratings │
- └────┬─────┘  └──────┬───────┘  └────┬─────┘
-      └───────────────┴───────────────┘
-                      │
-                      ▼
-            ┌─────────────────┐
-            │  Custom MCP     │
-            │  Server         │
-            └────────┬────────┘
-                     │
-            MongoDB Atlas
-            ├── hospitals  (5,400+)
-            ├── prices     (260K+ DRG/APC records)
-            ├── procedures (vector search index)
-            └── providers  (3.37M NPI records)
+```mermaid
+graph TD
+    %% Styling
+    classDef user fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0369a1
+    classDef next fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1d4ed8
+    classDef hono fill:#faf5ff,stroke:#7c3aed,stroke-width:2px,color:#6d28d9
+    classDef orch fill:#f5f3ff,stroke:#8b5cf6,stroke-width:3px,color:#5b21b6
+    classDef subagent fill:#fdf2f8,stroke:#ec4899,stroke-width:2px,color:#be185d
+    classDef mcp fill:#fffbeb,stroke:#d97706,stroke-width:2px,color:#b45309
+    classDef db fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#15803d
+    classDef ext fill:#f0fdfa,stroke:#0d9488,stroke-width:1px,color:#0f766e
+
+    %% Nodes
+    User(["🧑 Patient Query<br/>'Knee replacement near 94102'"])
+    NextApp["🖥️ Next.js 14 Web App<br/>(Reactive UI / Chat UI)"]
+    HonoAPI["⚡ Hono.js API (Cloud Run)<br/>(SSE Stream Manager)"]
+    Orch["🎯 Orchestrator Agent<br/>(gemini-3.5-flash)"]
+
+    %% Parallel Sub-agents
+    subgraph Step1["Step 1: Query & Geo Parsing (Parallel)"]
+        ProcAgent["🔬 Procedure Agent<br/>(gemini-3.5-flash)"]
+        GeoAgent["🗺️ Hospital Discovery Agent<br/>(gemini-3.5-flash)"]
+    end
+
+    subgraph Step2["Step 2: Pricing & Quality (Parallel)"]
+        PriceAgent["💰 Price Intel Agent<br/>(gemini-3.5-flash)"]
+        QualAgent["⭐ Quality & Financial Agent<br/>(gemini-3.5-flash)"]
+        ProvAgent["👨‍⚕️ Provider Agent<br/>(gemini-3.5-flash)"]
+    end
+
+    MCPServer["🔌 Custom MCP Server<br/>(Node.js / Stdio)"]
+
+    subgraph DB["MongoDB Atlas Database"]
+        AtlasProcedures[("🔍 procedures<br/>(Atlas Vector Search)")]
+        AtlasHospitals[("📍 hospitals<br/>(2dsphere Index)")]
+        AtlasPrices[("💲 prices<br/>(Inpatient/Outpatient)")]
+        AtlasProviders[("🩺 providers<br/>(NPI 3.37M Directory)")]
+    end
+
+    GoogleMaps["🗺️ Google Maps API<br/>(Geocoding & Places)"]
+    NPIRegistry["🏥 CMS NPI Registry"]
+
+    %% Relationships / Flow
+    User -->|Asks procedure & location| NextApp
+    NextApp -->|EventSource SSE stream| HonoAPI
+    HonoAPI -->|Orchestrates session| Orch
+
+    Orch -->|Dispatches in parallel| ProcAgent
+    Orch -->|Dispatches in parallel| GeoAgent
+
+    %% MCP Interactions
+    ProcAgent -->|search_procedures| MCPServer
+    GeoAgent -->|find_hospitals_near| MCPServer
+
+    %% Database queries for Step 1
+    MCPServer -->|1. Vector Search + Full-Text| AtlasProcedures
+    MCPServer -->|2. Geospatial $near Query| AtlasHospitals
+    MCPServer -->|3. Geocode lookup| GoogleMaps
+
+    %% Hand back to Orchestrator
+    ProcAgent -.->|DRG/APC codes| Orch
+    GeoAgent -.->|Hospital list with CCNs| Orch
+
+    %% Step 2 Dispatch
+    Orch -->|Dispatches in parallel| PriceAgent
+    Orch -->|Dispatches in parallel| QualAgent
+    Orch -->|Dispatches in parallel| ProvAgent
+
+    %% Tool execution for Step 2
+    PriceAgent -->|get_price_data<br/>get_asc_prices| MCPServer
+    QualAgent -->|get_quality_scores<br/>get_financial_assistance| MCPServer
+    ProvAgent -->|get_providers| MCPServer
+
+    %% Database queries for Step 2
+    MCPServer -->|4. Price aggregates / $median| AtlasPrices
+    MCPServer -->|5. Quality stars & charity care| AtlasHospitals
+    MCPServer -->|6. Retrieve affiliated physicians| AtlasProviders
+    MCPServer -->|7. Provider Google ratings| GoogleMaps
+
+    %% Output collation
+    PriceAgent -.->|Medicare vs ASC prices| Orch
+    QualAgent -.->|Leapfrog grades + stars| Orch
+    ProvAgent -.->|Specialist list & ratings| Orch
+
+    Orch -->|8. Ranks & Synthesizes response| HonoAPI
+    HonoAPI -->|9. Streams tokens + structured chips| NextApp
+    NextApp -->|10. Renders interactive results| User
+
+    %% Apply Classes
+    class User user
+    class NextApp next
+    class HonoAPI hono
+    class Orch orch
+    class ProcAgent,GeoAgent,PriceAgent,QualAgent,ProvAgent subagent
+    class MCPServer mcp
+    class AtlasProcedures,AtlasHospitals,AtlasPrices,AtlasProviders db
+    class GoogleMaps,NPIRegistry ext
 ```
 
 **Total: ~8 seconds end-to-end.** Procedure + Hospital agents run in parallel (Step 1), then Price + Quality + Provider run in parallel (Step 2).

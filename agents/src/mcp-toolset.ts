@@ -8,10 +8,6 @@ import { resolve, dirname, join } from 'path'
 import { existsSync } from 'fs'
 
 function findProjectRoot(): string {
-  const localPath = '/Users/pratik/hackathong'
-  if (existsSync(localPath)) {
-    return localPath
-  }
   let dir = process.cwd()
   for (let i = 0; i < 5; i++) {
     if (existsSync(join(dir, 'mcp-server')) && existsSync(join(dir, 'package.json'))) {
@@ -60,6 +56,7 @@ export function createMcpToolset(toolFilter: string[] = []): MCPToolset {
         args: [MCP_SERVER_PATH],
         env: {
           ...process.env,
+          PORT: '', // Clear PORT so it falls back to stdio mode
           MONGODB_URI: process.env['MONGODB_URI'] ?? '',
           MONGODB_DATABASE: process.env['MONGODB_DATABASE'] ?? 'clearprice',
           GOOGLE_MAPS_API_KEY: process.env['GOOGLE_MAPS_API_KEY'] ?? '',

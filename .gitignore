@@ -10,7 +10,4 @@ dist/
 *.tfstate.backup
 .terraform.lock.hcl
 
-# Local AI assistant files
-CLAUDE.md
-.claude/
 DEVPOST_SUBMISSION.md

@@ -12,5 +12,5 @@ import { fileURLToPath } from 'url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: resolve(__dirname, '../../.env') })
 
-export { orchestrator } from './orchestrator.js'
+export { orchestrator, ORCHESTRATOR_PROMPT_VERSION } from './orchestrator.js'
 export { runner, sessionService } from './runner.js'

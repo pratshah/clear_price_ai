@@ -3,7 +3,8 @@ import { createMcpToolset } from './mcp-toolset.js'
 
 export const providerAgent = new LlmAgent({
   name: 'provider_agent',
-  model: 'gemini-2.0-flash',
+  model: 'gemini-3.5-flash',
+  description: 'Finds physicians and specialists at a hospital by specialty, including ratings and availability.',
   instruction: `You are a physician directory specialist for ClearPrice.
 
 Your job: find physicians and specialists at a given hospital when the user asks about specific doctors or surgeons.

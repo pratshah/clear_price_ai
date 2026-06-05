@@ -3,7 +3,8 @@ import { createMcpToolset } from './mcp-toolset.js'
 
 export const insuranceAgent = new LlmAgent({
   name: 'insurance_agent',
-  model: 'gemini-2.0-flash',
+  model: 'gemini-3.5-flash',
+  description: 'Qualifies the user\'s Medicare coverage profile and calculates out-of-pocket costs for their plan.',
   instruction: `You are a Medicare and healthcare insurance specialist for ClearPrice.
 
 Your job: qualify the user's Medicare coverage profile (Medicare Type, Medigap Supplemental Plan, or Medicare Advantage) and guide them through their out-of-pocket (OOP) cost calculations.
