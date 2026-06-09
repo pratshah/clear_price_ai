@@ -3,17 +3,17 @@ import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-config({ path: resolve(__dirname, '../../.env') })
+config({ path: resolve(__dirname, '../.env') })
 
-import { InMemoryRunner, StreamingMode } from '@google/adk'
+import { InMemoryRunner } from '@google/adk'
 import { orchestrator } from '@clearprice/agents'
 
-const SESSION_ID = 'test-session-stream-1'
+const SESSION_ID = 'test-session-nonstream-1'
 const USER_ID = 'test-user'
 const query = 'Translate knee replacement to medical codes'
 
 async function run() {
-  console.log(`Testing InMemoryRunner runAsync with StreamingMode.SSE...`)
+  console.log(`Testing InMemoryRunner runAsync WITHOUT StreamingMode.SSE...`)
   
   const runner = new InMemoryRunner({
     agent: orchestrator,
@@ -35,11 +35,8 @@ async function run() {
     userId: USER_ID,
     sessionId: SESSION_ID,
     newMessage: userMessage,
-    runConfig: {
-      streamingMode: StreamingMode.SSE,
-    }
   })) {
-    console.log(`[Event] Author: ${event.author}, Type: ${(event as any).type || 'unknown'}, Keys: ${Object.keys(event).join(', ')}`)
+    console.log(`[Event] Author: ${event.author}, Keys: ${Object.keys(event).join(', ')}`)
     if (event.content) {
       console.log(`  -> Content keys: ${Object.keys(event.content).join(', ')}`)
       if (event.content.parts) {
@@ -56,11 +53,7 @@ async function run() {
             console.log(`      * Tool Response: ${part.functionResponse.name}`)
           }
         }
-      } else {
-        console.log(`  -> Content exists but has no parts:`, JSON.stringify(event.content))
       }
-    } else {
-      console.log(`  -> Event (No Content):`, JSON.stringify(event))
     }
   }
 
@@ -69,6 +62,6 @@ async function run() {
 }
 
 run().catch((err) => {
-  console.error('Error during streaming test:', err)
+  console.error('Error during test:', err)
   process.exit(1)
 })

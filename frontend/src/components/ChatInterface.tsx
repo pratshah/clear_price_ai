@@ -159,9 +159,10 @@ interface Props {
   onMessage?: (content: string) => void
   onUserSend?: (text: string) => void
   onLoadingChange?: (loading: boolean) => void
+  onPriceData?: (data: { ranked: any[]; procedures: any[] }) => void
 }
 
-export default function ChatInterface({ onMessage, onUserSend, onLoadingChange }: Props) {
+export default function ChatInterface({ onMessage, onUserSend, onLoadingChange, onPriceData }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
@@ -254,6 +255,8 @@ export default function ChatInterface({ onMessage, onUserSend, onLoadingChange }
                   }
                   return prev
                 })
+              } else if (currentEvent === 'price_data') {
+                onPriceData?.(parsed)
               } else if (currentEvent === 'suggestion_chips') {
                 setSuggestionChips((parsed.chips ?? []) as string[])
               } else if (currentEvent === 'message') {

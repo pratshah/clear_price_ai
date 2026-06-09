@@ -4,7 +4,7 @@ async function run() {
   console.log('Testing search_procedures tool with query "knee replacement"...')
   try {
     const response = await searchProcedures.handler({
-      query: 'knee replacement',
+      query: 'knee replacement near zip 94102',
       top_k: 5
     })
     console.log('\nResponse from searchProcedures:')

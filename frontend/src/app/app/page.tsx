@@ -12,10 +12,18 @@ const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''
 
 type Tab = 'map' | 'table' | 'insights'
 
-function extractZip(text: string): string | null {
-  const m = text.match(/\b(\d{5})\b/)
-  return m ? m[1] : null
+function extractLocation(text: string): string | null {
+  // 5-digit zip takes priority
+  const zip = text.match(/\b(\d{5})\b/)
+  if (zip) return zip[1]
+  // "near <city>" or "in <city>"
+  const city = text.match(/(?:near|in|around|close to)\s+([A-Za-z][A-Za-z\s,]+?)(?:\?|$|,|\s+for|\s+with)/i)
+  if (city) return city[1].trim()
+  return null
 }
+
+// Keep old name as alias so other callers still work
+const extractZip = extractLocation
 
 // Try to extract an explicit DRG/APC code from agent text first
 function extractExplicitCode(text: string): { code: string; type: 'DRG' | 'APC' } | null {
@@ -131,12 +139,46 @@ export default function HomePage() {
 
   const handleUserSend = useCallback((text: string) => {
     lastUserQuery.current = text
-    // Reset pending buffers for new query
+    // Clear stale data and pending buffers for new query
     pendingHospitalsRef.current = null
     pendingPriceRef.current = null
-    const zip = extractZip(text)
-    if (zip) fetchHospitalsForMap(zip)
+    currentHospitalsRef.current = []
+    setHospitals([])
+    setPrices([])
+    setPricesMeta(null)
+    const loc = extractLocation(text)
+    if (loc) fetchHospitalsForMap(loc)
   }, [fetchHospitalsForMap])
+
+  const handlePriceData = useCallback((data: { ranked: any[]; procedures: any[] }) => {
+    const proc = data.procedures[0]
+    if (!proc) return
+    const priceRows: HospitalPrice[] = data.ranked
+      .filter((h) => h.avg_medicare_payments !== null)
+      .map((h) => ({
+        ccn: h.ccn,
+        hospital_name: h.name,
+        avg_covered_charges: h.avg_covered_charges ?? 0,
+        avg_medicare_payments: h.avg_medicare_payments,
+        avg_total_payments: h.avg_covered_charges ?? 0,
+        total_discharges: h.total_discharges ?? 0,
+        national_median_payment: h.national_median_payment,
+        pct_vs_national: h.pct_vs_national,
+        cms_star_rating: h.cms_star_rating,
+        google_rating: h.google_rating,
+      }))
+    setPrices(priceRows)
+    setPricesMeta({ procedure_code: proc.code, code_type: proc.code_type, national_median: data.ranked[0]?.national_median_payment ?? null })
+    setInsightsProcedure({ code: proc.code, type: proc.code_type })
+    setHospitals(data.ranked.map((h) => ({
+      ccn: h.ccn,
+      name: h.name,
+      distance_miles: h.distance_miles,
+      quality: h.cms_star_rating != null ? { cms_star_rating: h.cms_star_rating } : undefined,
+      google: h.google_rating != null ? { rating: h.google_rating } : undefined,
+    })))
+    setTab('table')
+  }, [])
 
   const handleMessage = useCallback(async (content: string) => {
     // 1. Resolve procedure code: explicit DRG/APC in response → keyword in user query → keyword in response
@@ -153,9 +195,9 @@ export default function HomePage() {
     // 2. Resolve hospitals: use ref (avoids stale closure), fallback to fetching via zip in response
     let hosps = currentHospitalsRef.current
     if (!hosps.length) {
-      const zip = extractZip(content) ?? extractZip(lastUserQuery.current)
-      if (zip) {
-        const fetched = await fetchHospitalsForMap(zip)
+      const loc = extractLocation(lastUserQuery.current) ?? extractLocation(content)
+      if (loc) {
+        const fetched = await fetchHospitalsForMap(loc)
         if (fetched) hosps = fetched
       }
     }
@@ -193,7 +235,7 @@ export default function HomePage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Chat panel — 40% */}
         <div className="w-2/5 border-r border-slate-200 bg-slate-50 flex flex-col overflow-hidden">
-          <ChatInterface onMessage={handleMessage} onUserSend={handleUserSend} onLoadingChange={setChatLoading} />
+          <ChatInterface onMessage={handleMessage} onUserSend={handleUserSend} onLoadingChange={setChatLoading} onPriceData={handlePriceData} />
         </div>
 
         {/* Results panel — 60% */}

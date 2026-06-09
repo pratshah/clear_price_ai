@@ -5,18 +5,16 @@ let client: MongoClient | null = null
 export async function getDb(): Promise<Db> {
   const uri = process.env['MONGODB_URI']
   if (!uri) throw new Error('MONGODB_URI is not set')
+  const dbName = process.env['MONGODB_DATABASE'] ?? 'clearprice'
 
-  // Self-healing: if client exists but topology is disconnected, reset and reconnect
   if (client) {
-    const isConnected = (client as any).topology && typeof (client as any).topology.isConnected === 'function'
-      ? (client as any).topology.isConnected()
-      : false;
-
-    if (!isConnected) {
-      console.warn('MongoDB client topology is disconnected. Resetting client...')
+    try {
+      await client.db(dbName).command({ ping: 1 })
+    } catch (err) {
+      console.warn('[getDb] Connection pool is dead or topology is closed. Re-initializing client...', err)
       try {
         await client.close()
-      } catch (_) {}
+      } catch {}
       client = null
     }
   }
@@ -25,8 +23,11 @@ export async function getDb(): Promise<Db> {
     client = new MongoClient(uri, {
       connectTimeoutMS: 5000,
       serverSelectionTimeoutMS: 5000,
+      maxPoolSize: 10,
     })
     await client.connect()
+    console.log('[getDb] Successfully initialized new MongoClient connection pool.')
   }
-  return client.db(process.env['MONGODB_DATABASE'] ?? 'clearprice')
+  return client.db(dbName)
 }
+

@@ -1,7 +1,6 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
-import { StreamingMode } from '@google/adk'
 import { getRunner, ensureSession } from '../agent-runner.js'
 import { runEvaluation } from '../services/evaluator.js'
 
@@ -40,10 +39,13 @@ chatRoute.post('/', async (c) => {
 
   return streamSSE(c, async (stream) => {
     try {
+      const tStart = Date.now()
       await ensureSession(session_id, user_id)
+      console.log(`[chat] ensureSession: ${Date.now() - tStart}ms`)
 
       const runner = getRunner()
       const userMessage = { role: 'user' as const, parts: [{ text: message }] }
+      let firstEventAt: number | null = null
 
       const activeAgents = new Set<string>()
       let responseText = ''
@@ -53,18 +55,40 @@ chatRoute.post('/', async (c) => {
         userId: user_id,
         sessionId: session_id,
         newMessage: userMessage,
-        runConfig: {
-          streamingMode: StreamingMode.SSE,
-        },
       })) {
         const author: string = event.author ?? ''
-        const isPartial = (event as any).partial === true
 
         const parts = (event.content?.parts ?? []) as Array<{
           text?: string
           functionCall?: { name: string; args?: unknown }
           functionResponse?: unknown
         }>
+
+        if (!firstEventAt) {
+          firstEventAt = Date.now()
+          console.log(`[chat] first ADK event: ${firstEventAt - tStart}ms`)
+        }
+        // Emit structured price data from find_and_compare so the right panel updates
+        for (const part of parts) {
+          if (part.functionResponse && (part.functionResponse as any).name === 'find_and_compare') {
+            try {
+              const raw = (part.functionResponse as any).response?.content?.[0]?.text
+              if (raw) {
+                const parsed = JSON.parse(raw)
+                if (parsed.ranked?.length > 0 && parsed.procedures?.length > 0) {
+                  await stream.writeSSE({
+                    event: 'price_data',
+                    data: JSON.stringify({
+                      ranked: parsed.ranked,
+                      procedures: parsed.procedures,
+                    }),
+                  })
+                }
+              }
+            } catch {}
+          }
+        }
+        console.log('[ADK Event]', JSON.stringify({ author, parts: parts.map(p => ({ ...p, text: p.text?.slice(0, 50) })) }))
 
 
         // Emit agent_status events for the UI status panel
@@ -78,7 +102,7 @@ chatRoute.post('/', async (c) => {
           }
         }
 
-        // Only stream text from the orchestrator (not sub-agents / tool responses)
+        // Stream text only from the orchestrator — sub-agent text is internal JSON/data
         if (author !== 'clearprice_orchestrator') continue
 
         let chunkText = ''
@@ -88,26 +112,34 @@ chatRoute.post('/', async (c) => {
 
         if (!chunkText) continue
 
-        if (isPartial) {
-          // Partial: stream chunks immediately, accumulate into responseText
-          responseText += chunkText
+        // Split chunkText into small slices to simulate real-time typing
+        const SLICE_SIZE = 15 // chars per slice
+        const SLICE_DELAY = 10 // ms between slices
+        let offset = 0
+        while (offset < chunkText.length) {
+          const slice = chunkText.slice(offset, offset + SLICE_SIZE)
+          offset += SLICE_SIZE
+
+          responseText += slice
 
           const suggStartedBefore = isSuggestionsBlockStarted
           if (responseText.includes('[SUGGESTIONS]')) isSuggestionsBlockStarted = true
 
           if (!isSuggestionsBlockStarted) {
-            await stream.writeSSE({ event: 'message_chunk', data: JSON.stringify({ text: chunkText }) })
+            await stream.writeSSE({ event: 'message_chunk', data: JSON.stringify({ text: slice }) })
           } else if (!suggStartedBefore) {
             const suggIndex = responseText.indexOf('[SUGGESTIONS]')
-            const chunkStart = responseText.length - chunkText.length
+            const chunkStart = responseText.length - slice.length
             if (suggIndex > chunkStart) {
-              const before = chunkText.substring(0, suggIndex - chunkStart)
-              if (before) await stream.writeSSE({ event: 'message_chunk', data: JSON.stringify({ text: before }) })
+              const before = slice.substring(0, suggIndex - chunkStart)
+              if (before) {
+                await stream.writeSSE({ event: 'message_chunk', data: JSON.stringify({ text: before }) })
+              }
             }
           }
-        } else {
-          // Final (non-partial) event: replace responseText with this authoritative value
-          responseText = chunkText
+
+          // Delay to simulate typing
+          await new Promise((resolve) => setTimeout(resolve, SLICE_DELAY))
         }
       }
 
@@ -136,9 +168,10 @@ chatRoute.post('/', async (c) => {
         } catch (err) {
           console.warn('Failed to parse dynamic suggestion chips JSON:', err)
         }
-        // Strip the suggestions tag entirely so the client only receives clean markdown
         cleanResponseText = responseText.replace(/\[SUGGESTIONS\][\s\S]*?\[\/SUGGESTIONS\]/, '').trim()
       }
+      // Strip any partial/unclosed [SUGGESTIONS] block (model truncated the closing tag)
+      cleanResponseText = cleanResponseText.replace(/\[SUGGESTIONS\][\s\S]*$/, '').trim()
 
       // Emit suggestion chips if found
       if (suggestionChips.length > 0) {

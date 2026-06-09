@@ -7,6 +7,7 @@ import { orchestrator, ORCHESTRATOR_PROMPT_VERSION } from '@clearprice/agents'
 import { getDb } from './db.js'
 
 let _runner: InMemoryRunner | null = null
+let _promptLoaded = false
 
 export function getRunner(): InMemoryRunner {
   if (!_runner) {
@@ -16,37 +17,29 @@ export function getRunner(): InMemoryRunner {
 }
 
 export async function ensureSession(sessionId: string, userId = 'anonymous'): Promise<void> {
-  // Hot-reload system instructions from MongoDB Prompt Registry (LLMOps)
-  try {
-    const db = await getDb()
-    const promptDoc = await db.collection('prompts').findOne({ name: 'clearprice_orchestrator' })
-    
-    // Check if we need to migrate/update the DB prompt
-    const dbVersion = promptDoc?.version ?? '0.0.0'
-    const needsMigration = dbVersion < ORCHESTRATOR_PROMPT_VERSION
+  // Hot-reload system instructions from MongoDB Prompt Registry (LLMOps) — once per process lifetime
+  if (!_promptLoaded) {
+    _promptLoaded = true
+    try {
+      const db = await getDb()
+      const promptDoc = await db.collection('prompts').findOne({ name: 'clearprice_orchestrator' })
+      const dbVersion = promptDoc?.version ?? '0.0.0'
+      const needsMigration = dbVersion < ORCHESTRATOR_PROMPT_VERSION
 
-    if (promptDoc && typeof promptDoc.prompt === 'string' && !needsMigration) {
-      orchestrator.instruction = promptDoc.prompt
-      console.log(`LLMOps Prompt Registry: Hot-reloaded "clearprice_orchestrator" prompt from MongoDB Atlas (Version: ${dbVersion}).`)
-    } else {
-      // Upsert/Migrate current prompt into MongoDB
-      await db.collection('prompts').updateOne(
-        { name: 'clearprice_orchestrator' },
-        { 
-          $set: { 
-            name: 'clearprice_orchestrator',
-            prompt: orchestrator.instruction, 
-            updatedAt: new Date(), 
-            version: ORCHESTRATOR_PROMPT_VERSION,
-            description: 'Dynamic system prompt for the ClearPrice main orchestrator agent.'
-          } 
-        },
-        { upsert: true }
-      )
-      console.log(`LLMOps Prompt Registry: Seeded/Migrated "clearprice_orchestrator" prompt in MongoDB Atlas to version ${ORCHESTRATOR_PROMPT_VERSION}.`)
+      if (promptDoc && typeof promptDoc.prompt === 'string' && !needsMigration) {
+        orchestrator.instruction = promptDoc.prompt
+        console.log(`LLMOps: Hot-reloaded prompt v${dbVersion}`)
+      } else {
+        await db.collection('prompts').updateOne(
+          { name: 'clearprice_orchestrator' },
+          { $set: { name: 'clearprice_orchestrator', prompt: orchestrator.instruction, updatedAt: new Date(), version: ORCHESTRATOR_PROMPT_VERSION, description: 'Dynamic system prompt for the ClearPrice main orchestrator agent.' } },
+          { upsert: true }
+        )
+        console.log(`LLMOps: Migrated prompt to v${ORCHESTRATOR_PROMPT_VERSION}`)
+      }
+    } catch (err) {
+      console.warn('LLMOps: Failed to fetch/seed prompt from DB. Using local instructions.', err)
     }
-  } catch (err) {
-    console.warn('LLMOps Prompt Registry: Failed to fetch/seed prompt from DB. Falling back to local instructions.', err)
   }
 
   const runner = getRunner()

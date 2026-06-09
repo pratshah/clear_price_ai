@@ -12,6 +12,8 @@ import { getFinancialAssistance } from './tools/getFinancialAssistance.js'
 import { getProviders } from './tools/getProviders.js'
 import { getProviderRatings } from './tools/getProviderRatings.js'
 import { rankHospitals } from './tools/rankHospitals.js'
+import { getHospitalComparison } from './tools/getHospitalComparison.js'
+import { findAndCompare } from './tools/findAndCompare.js'
 import { saveSession, getSession } from './tools/session.js'
 
 function createMcpServer(): McpServer {
@@ -30,6 +32,8 @@ function createMcpServer(): McpServer {
   s.tool('get_providers', getProviders.schema, getProviders.handler)
   s.tool('get_provider_ratings', getProviderRatings.schema, getProviderRatings.handler)
   s.tool('rank_hospitals', rankHospitals.schema, rankHospitals.handler)
+  s.tool('get_hospital_comparison', getHospitalComparison.schema, getHospitalComparison.handler)
+  s.tool('find_and_compare', findAndCompare.schema, findAndCompare.handler)
   s.tool('save_session', saveSession.schema, saveSession.handler)
   s.tool('get_session', getSession.schema, getSession.handler)
 

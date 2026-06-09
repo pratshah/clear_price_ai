@@ -13,7 +13,7 @@ let client: MongoClient | null = null
 export async function getDb(): Promise<Db> {
   const uri = process.env['MONGODB_URI']
   if (!uri) throw new Error('MONGODB_URI env var is required')
-  if (!client) {
+  if (!client || (client as any).topology?.closed) {
     client = new MongoClient(uri)
     await client.connect()
     console.log('Connected to MongoDB')

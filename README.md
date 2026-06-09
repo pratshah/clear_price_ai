@@ -158,13 +158,14 @@ graph TD
 │
 ├── mcp-server/      Custom MCP Server (MongoDB Atlas tools)
 │   └── src/tools/
+│       ├── findAndCompare.ts      Consolidated tool: runs embedding, geocoding, geo-query, vector search, pricing, and scoring in parallel
 │       ├── searchProcedures.ts    Atlas Vector Search: NL → codes
 │       ├── findHospitalsNear.ts   $near geo query
 │       ├── getPriceData.ts        Aggregation pipeline + $median
 │       ├── getAscPrices.ts        Surgery center alternative prices
 │       ├── getQualityScores.ts    CMS + Leapfrog grades
 │       ├── getFinancialAssistance.ts  Charity care ratios (HCRIS)
-│       ├── getProviders.ts        NPI physician directory
+│       ├── getProviders.ts        NPI physician directory with live dynamic NPPES API fallback
 │       └── rankHospitals.ts       Composite score: price+quality+distance
 │
 ├── api/             Hono.js REST API + SSE streaming (Cloud Run)
