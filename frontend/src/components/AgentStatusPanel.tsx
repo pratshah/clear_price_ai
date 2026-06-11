@@ -53,7 +53,7 @@ export default function AgentStatusPanel({ agents }: { agents: AgentState }) {
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Agent Pipeline</p>
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Autonomous Multi-Agent Pipeline (Google ADK & MCP)</p>
       <div className="space-y-1.5">
         {(Object.keys(AGENT_LABELS) as Array<keyof AgentState>).map((key) => (
           <div key={key} className="flex items-center gap-2">

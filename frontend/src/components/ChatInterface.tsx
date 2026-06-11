@@ -166,7 +166,18 @@ export default function ChatInterface({ onMessage, onUserSend, onLoadingChange, 
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: 'Hi! I\'m **ClearPrice**. Ask me about hospital prices near you — for example:\n\n- *"What will a knee replacement cost near zip 94102?"*\n- *"Compare colonoscopy prices for hospitals in Chicago"*\n- *"Which hospital near 10001 has the best value for hip replacement?"*',
+      content: `Hi! I'm **ClearPrice**, an autonomous healthcare navigation workbench. Unlike simple chatbots, I coordinate **5 specialized sub-agents** working in parallel (via Google ADK & MCP) to execute complex, multi-step medical pricing and quality audits directly from MongoDB Atlas.
+
+### 🚀 Launch an Agent Mission:
+1. 🗺️ **Geospatial Price & Quality Audit**: *"Compare knee replacements near zip 94102"* (Runs parallel procedure mapping, geospatial hospital scans, and CMS quality scoring)
+2. 🏥 **Outpatient ASC Alternative Scout**: *"Find colonoscopy options in Chicago and suggest Ambulatory Surgery Centers (ASCs)"* (Spins up our dedicated **ASC Outpatient Scout** sub-agent to compare hospitals with free-standing surgery centers that are often 60-70% cheaper)
+3. 👨‍⚕️ **Specialist Review & Google Rating Scout**: *"Who are the orthopedic surgeons at Kaiser SF and what are their ratings?"* (Crawls physician NPI registry and Google Places review ratings)
+
+### 💾 Conversational Database Portfolio:
+I have direct, autonomous write/read access to your hospital portfolio database. You can manage your portfolio entirely through chat:
+* 💬 *"Save Stanford Hospital to my portfolio"* (Saves hospital metadata directly to MongoDB)
+* 💬 *"Show my saved hospitals"* (Queries and lists your bookmarks)
+* 💬 *"Remove Kaiser from my list"* (Deletes the record from your database)`,
     },
   ])
   const [input, setInput] = useState('')
@@ -385,7 +396,7 @@ export default function ChatInterface({ onMessage, onUserSend, onLoadingChange, 
         <div className="flex gap-2 mt-2 flex-wrap">
           {(suggestionChips.length > 0
             ? suggestionChips
-            : ['Knee replacement near 94102', 'Colonoscopy in Chicago', 'Hip replacement 10001']
+            : ['Knee replacement near 94102', 'Colonoscopy in Chicago', 'Hip replacement near 85006']
           ).map((q) => (
             <button
               key={q}

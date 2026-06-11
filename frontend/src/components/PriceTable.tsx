@@ -1,6 +1,6 @@
-'use client'
+import { useState, useEffect } from 'react'
 
-import { useState } from 'react'
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080'
 
 export interface HospitalPrice {
   ccn: string
@@ -20,6 +20,12 @@ export interface HospitalPrice {
 function fmt(n: number | null | undefined) {
   if (n == null) return '—'
   return '$' + Math.round(n).toLocaleString()
+}
+
+function fmtPayment(n: number | null | undefined, isEstimate: boolean) {
+  if (n == null) return '—'
+  const val = '$' + Math.round(n).toLocaleString()
+  return isEstimate ? `~${val} (Est.)` : val
 }
 
 function Stars({ n }: { n: number | null }) {
@@ -65,13 +71,70 @@ export default function PriceTable({
   const medicarePlan = externalPlan ?? localPlan
   const handlePlanChange = onPlanChange ?? setLocalPlan
 
+  const [savingCcn, setSavingCcn] = useState<string | null>(null)
+  const [savedCcns, setSavedCcns] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/portfolio`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.portfolio) {
+          setSavedCcns(new Set(data.portfolio.map((h: any) => h.ccn)))
+        }
+      })
+      .catch(() => {})
+  }, [prices])
+
+  const toggleSave = async (p: HospitalPrice) => {
+    const isSaved = savedCcns.has(p.ccn)
+    setSavingCcn(p.ccn)
+    try {
+      if (isSaved) {
+        const res = await fetch(`${API_URL}/api/portfolio/${p.ccn}`, { method: 'DELETE' })
+        if (res.ok) {
+          setSavedCcns((prev) => {
+            const next = new Set(prev)
+            next.delete(p.ccn)
+            return next
+          })
+        }
+      } else {
+        const res = await fetch(`${API_URL}/api/portfolio`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ccn: p.ccn,
+            name: p.hospital_name,
+            cms_star_rating: p.cms_star_rating,
+            google_rating: p.google_rating,
+          }),
+        })
+        if (res.ok) {
+          setSavedCcns((prev) => {
+            const next = new Set(prev)
+            next.add(p.ccn)
+            return next
+          })
+        }
+      }
+    } catch {
+    } finally {
+      setSavingCcn(null)
+    }
+  }
+
   const isDRG = codeType.toUpperCase() === 'DRG'
 
-  const calculateOOP = (p: HospitalPrice) => {
-    const rate = p.avg_medicare_payments || p.avg_medicare_allowed || 0
+  const calculateOOP = (p: HospitalPrice, useEstimate: boolean = false) => {
+    const rate = p.avg_medicare_payments || p.avg_medicare_allowed || (useEstimate ? p.national_median_payment : null)
+    if (rate === null && !p.avg_covered_charges) {
+      return null
+    }
+
+    const rateVal = rate || 0
     
     if (medicarePlan === 'uninsured') {
-      return p.avg_covered_charges || (rate * 2.5)
+      return p.avg_covered_charges || (rateVal * 2.5)
     }
 
     if (isDRG) {
@@ -84,7 +147,7 @@ export default function PriceTable({
     } else {
       // Part B - Outpatient
       const partBDeductible = 240
-      const coinsurance = rate * 0.2
+      const coinsurance = rateVal * 0.2
       if (medicarePlan === 'plan_f') {
         return 0
       }
@@ -156,26 +219,50 @@ export default function PriceTable({
           </tr>
         </thead>
         <tbody>
-          {prices.map((p, i) => (
-            <tr key={p.ccn} className={`border-b border-slate-50 hover:bg-slate-50 transition-colors ${i === 0 ? 'bg-green-50/40' : ''}`}>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  {i === 0 && (
-                    <span className="text-xs font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">Best Value</span>
-                  )}
-                  <span className="font-medium text-slate-800">{p.hospital_name}</span>
-                </div>
-                <div className="text-xs text-slate-400 mt-0.5">CCN {p.ccn}</div>
-              </td>
-              <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmt(p.avg_covered_charges)}</td>
-              <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmt(p.avg_medicare_payments || p.avg_medicare_allowed)}</td>
-              <td className="px-4 py-3 text-right tabular-nums font-bold text-brand bg-brand/5">{fmt(calculateOOP(p))}</td>
-              <td className="px-4 py-3 text-right"><PctBadge pct={p.pct_vs_national} /></td>
-              <td className="px-4 py-3 text-right tabular-nums text-slate-600">{(p.total_discharges || p.total_services || 0).toLocaleString()}</td>
-              <td className="px-4 py-3 text-right"><Stars n={p.cms_star_rating} /></td>
-              <td className="px-4 py-3 text-right"><Stars n={p.google_rating} /></td>
-            </tr>
-          ))}
+          {prices.map((p, i) => {
+            const hasLocalPrice = p.avg_medicare_payments != null || p.avg_medicare_allowed != null
+            const useEstimate = !hasLocalPrice && p.national_median_payment != null
+            const displayPayment = hasLocalPrice 
+              ? (p.avg_medicare_payments || p.avg_medicare_allowed) 
+              : (useEstimate ? p.national_median_payment : null)
+
+            return (
+              <tr key={p.ccn} className={`border-b border-slate-50 hover:bg-slate-50 transition-colors ${i === 0 ? 'bg-green-50/40' : ''}`}>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => { e.preventDefault(); toggleSave(p); }}
+                      disabled={savingCcn === p.ccn}
+                      className="text-base focus:outline-none transition-transform hover:scale-125 duration-100 mr-1"
+                      title={savedCcns.has(p.ccn) ? "Remove from Portfolio" : "Save to Portfolio"}
+                    >
+                      {savedCcns.has(p.ccn) ? (
+                        <span className="text-amber-400">★</span>
+                      ) : (
+                        <span className="text-slate-300 hover:text-amber-400">☆</span>
+                      )}
+                    </button>
+                    {i === 0 && (
+                      <span className="text-xs font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">Best Value</span>
+                    )}
+                    <span className="font-medium text-slate-800">{p.hospital_name}</span>
+                  </div>
+                  <div className="text-xs text-slate-400 mt-0.5">CCN {p.ccn}</div>
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmt(p.avg_covered_charges)}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                  {fmtPayment(displayPayment, useEstimate)}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums font-bold text-brand bg-brand/5">
+                  {fmtPayment(calculateOOP(p, useEstimate), useEstimate)}
+                </td>
+                <td className="px-4 py-3 text-right"><PctBadge pct={p.pct_vs_national} /></td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-600">{(p.total_discharges || p.total_services || 0).toLocaleString()}</td>
+                <td className="px-4 py-3 text-right"><Stars n={p.cms_star_rating} /></td>
+                <td className="px-4 py-3 text-right"><Stars n={p.google_rating} /></td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
       <div className="px-4 py-2 text-xs text-slate-400 border-t border-slate-100">

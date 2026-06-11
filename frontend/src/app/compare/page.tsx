@@ -139,7 +139,7 @@ export default function ComparePage() {
             <span className="text-xs text-slate-400">Quick examples:</span>
             {[
               { zip: '94102', code: '470', type: 'DRG' as const, label: 'Knee replacement SF' },
-              { zip: '10001', code: '469', type: 'DRG' as const, label: 'Hip replacement NYC' },
+              { zip: '85006', code: '469', type: 'DRG' as const, label: 'Hip replacement Phoenix' },
               { zip: '60601', code: '0074', type: 'APC' as const, label: 'Colonoscopy Chicago' },
             ].map((ex) => (
               <button

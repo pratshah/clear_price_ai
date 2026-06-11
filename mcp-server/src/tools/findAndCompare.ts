@@ -62,11 +62,12 @@ export const findAndCompare = {
 
     // Phase 2: procedure search + hospital geo search in parallel
     const procedureSearchPromise = (async () => {
+      const searchLimit = Math.max(top_k_procedures, 5)
       // Tier 1: vector search
       if (queryVector) {
         try {
           const res = await db.collection('procedures').aggregate([
-            { $vectorSearch: { index: 'procedures_vector_index', path: 'embedding', queryVector, numCandidates: 50, limit: top_k_procedures } },
+            { $vectorSearch: { index: 'procedures_vector_index', path: 'embedding', queryVector, numCandidates: 50, limit: searchLimit } },
             { $project: { _id: 0, code: 1, code_type: 1, plain_name: 1, setting: 1 } },
           ]).toArray()
           if (res.length > 0) return res
@@ -76,7 +77,7 @@ export const findAndCompare = {
       try {
         const res = await db.collection('procedures').aggregate([
           { $search: { index: 'procedures_search', text: { query: procedure_query, path: ['description', 'plain_name', 'aliases'] } } },
-          { $limit: top_k_procedures },
+          { $limit: searchLimit },
           { $project: { _id: 0, code: 1, code_type: 1, plain_name: 1, setting: 1 } },
         ]).toArray()
         if (res.length > 0) return res
@@ -85,7 +86,7 @@ export const findAndCompare = {
       const regex = new RegExp(procedure_query.split(/\s+/).join('|'), 'i')
       return db.collection('procedures').find({
         $or: [{ plain_name: regex }, { description: regex }, { aliases: regex }],
-      }).limit(top_k_procedures).project({ _id: 0, code: 1, code_type: 1, plain_name: 1, setting: 1 }).toArray()
+      }).limit(searchLimit).project({ _id: 0, code: 1, code_type: 1, plain_name: 1, setting: 1 }).toArray()
     })()
 
     const hospitalSearchPromise = db.collection('hospitals').find({
@@ -116,8 +117,54 @@ export const findAndCompare = {
     }
 
     const ccns = hospitals.map((h: any) => h.ccn)
-    const codes = procedures.map((p: any) => p.code)
-    const codeType = procedures[0]?.code_type ?? 'DRG'
+
+    // Phase 2.5: Find the optimal candidate procedure with highest database coverage (local and global)
+    const candidateCodes = procedures.map((p: any) => p.code)
+    const [localCounts, globalCounts] = await Promise.all([
+      db.collection('prices').aggregate([
+        { $match: { hospital_ccn: { $in: ccns }, procedure_code: { $in: candidateCodes } } },
+        { $group: { _id: { code: '$procedure_code', type: '$procedure_code_type' }, count: { $sum: 1 } } }
+      ]).toArray(),
+      db.collection('prices').aggregate([
+        { $match: { procedure_code: { $in: candidateCodes } } },
+        { $group: { _id: { code: '$procedure_code', type: '$procedure_code_type' }, count: { $sum: 1 } } }
+      ]).toArray()
+    ])
+
+    const localMap = new Map<string, number>()
+    localCounts.forEach((c: any) => {
+      localMap.set(`${c._id.code}_${c._id.type}`, c.count)
+    })
+
+    const globalMap = new Map<string, number>()
+    globalCounts.forEach((c: any) => {
+      globalMap.set(`${c._id.code}_${c._id.type}`, c.count)
+    })
+
+    const rankedCandidates = procedures.map((p: any, index: number) => {
+      const key = `${p.code}_${p.code_type}`
+      const localCount = localMap.get(key) ?? 0
+      const globalCount = globalMap.get(key) ?? 0
+      return { p, localCount, globalCount, index }
+    }).sort((a: any, b: any) => {
+      if (b.localCount !== a.localCount) {
+        return b.localCount - a.localCount
+      }
+      if (b.globalCount !== a.globalCount) {
+        return b.globalCount - a.globalCount
+      }
+      return a.index - b.index
+    })
+
+    const bestCandidate = rankedCandidates[0]?.p ?? procedures[0]
+    // Filter to only include those matching the best candidate's code_type to keep consistency
+    const finalProcedures = rankedCandidates
+      .filter((rc: any) => rc.p.code_type === bestCandidate.code_type)
+      .map((rc: any) => rc.p)
+      .slice(0, top_k_procedures)
+
+    const codes = finalProcedures.map((p: any) => p.code)
+    const codeType = bestCandidate.code_type
 
     // Phase 3: price data + national median in parallel
     const t3 = Date.now()
@@ -147,6 +194,7 @@ export const findAndCompare = {
       return {
         ccn: h.ccn,
         name: h.name,
+        location: h.location,
         distance_miles,
         avg_medicare_payments: avgPayment ? Math.round(avgPayment) : null,
         avg_covered_charges: price?.avg_covered_charges ? Math.round(price.avg_covered_charges) : null,
@@ -186,7 +234,7 @@ export const findAndCompare = {
     ]
 
     return {
-      content: [{ type: 'text' as const, text: JSON.stringify({ procedures, ranked }) }],
+      content: [{ type: 'text' as const, text: JSON.stringify({ procedures: finalProcedures, ranked }) }],
     }
   },
 }

@@ -15,6 +15,7 @@ import { rankHospitals } from './tools/rankHospitals.js'
 import { getHospitalComparison } from './tools/getHospitalComparison.js'
 import { findAndCompare } from './tools/findAndCompare.js'
 import { saveSession, getSession } from './tools/session.js'
+import { saveToPortfolio, getFromPortfolio, removeFromPortfolio } from './tools/portfolio.js'
 
 function createMcpServer(): McpServer {
   const s = new McpServer({
@@ -36,6 +37,9 @@ function createMcpServer(): McpServer {
   s.tool('find_and_compare', findAndCompare.schema, findAndCompare.handler)
   s.tool('save_session', saveSession.schema, saveSession.handler)
   s.tool('get_session', getSession.schema, getSession.handler)
+  s.tool('save_to_portfolio', saveToPortfolio.schema, saveToPortfolio.handler)
+  s.tool('get_portfolio', getFromPortfolio.schema, getFromPortfolio.handler)
+  s.tool('remove_from_portfolio', removeFromPortfolio.schema, removeFromPortfolio.handler)
 
   return s
 }

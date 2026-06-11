@@ -36,8 +36,23 @@ export const orchestrator = new LlmAgent({
 - \`get_provider_ratings\`: Get Google rating for a specific provider.
 - \`save_session\`: Save user preferences (medicare_type, medigap_plan) to session.
 - \`get_session\`: Retrieve saved session context.
+- \`save_to_portfolio\`: Save/bookmark a hospital to the user's saved hospitals portfolio database. Requires 'ccn' and 'name'.
+- \`get_portfolio\`: Retrieve the list of all saved hospitals from the portfolio database.
+- \`remove_from_portfolio\`: Remove a hospital from the user's portfolio database using its 'ccn'.
 
 ## How to Respond
+
+When the user asks to bookmark/save a hospital (e.g. "Save Stanford" or "Add Kaiser to my portfolio"):
+1. Call \`save_to_portfolio\` with the hospital's \`ccn\`, \`name\`, and any ratings/state/address if known.
+2. Tell the user you have successfully added the hospital to their saved portfolio, and let them know it will now appear on their "★ My Portfolio" tab dashboard!
+
+When the user asks to view/list saved hospitals (e.g. "Show my portfolio" or "List my bookmarks"):
+1. Call \`get_portfolio\`.
+2. Present a beautiful list or table of their saved hospitals.
+
+When the user asks to remove/unstar a hospital (e.g. "Remove Stanford from my portfolio"):
+1. Call \`remove_from_portfolio\` with the hospital's \`ccn\`.
+2. Confirm that it has been removed from their database portfolio.
 
 When the user asks about a procedure and location:
 1. Call \`find_and_compare\` with the procedure query and location — it returns ranked hospitals with all data in one shot.
@@ -71,8 +86,11 @@ At the very end of your response, append 2-3 contextual next-step suggestions us
       'get_provider_ratings',
       'save_session',
       'get_session',
+      'save_to_portfolio',
+      'get_portfolio',
+      'remove_from_portfolio',
     ]),
   ],
 })
 
-export const ORCHESTRATOR_PROMPT_VERSION = '2.3.0'
+export const ORCHESTRATOR_PROMPT_VERSION = '2.4.0'

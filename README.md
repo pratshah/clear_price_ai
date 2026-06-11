@@ -30,6 +30,33 @@ ClearPrice is a multi-agent AI system that turns that public data into plain-Eng
 
 ---
 
+## 🏆 Hackathon Criteria Checklist (Judge Guide)
+
+ClearPrice is built from the ground up to directly meet and exceed the three primary judging criteria of the hackathon:
+
+### 1. Move Beyond Chat (Interactive Patient Workbench & DB Agent)
+ClearPrice is not a simple chatbot; it is a full, reactive patient workbench and database-managing agent:
+- **Autonomous DB Management (The Ultimate "Beyond Chat" Skill)**: The agent has direct access to read, write, and delete records from the user's hospital portfolio database using MongoDB MCP tools. When a user asks: *"Save Stanford Hospital to my portfolio,"* *"What hospitals are in my bookmarks?"* or *"Delete Kaiser from my list,"* the agent autonomously executes the database operation via MCP.
+- **Interactive Portfolio Dashboard**: Clicking the bookmark/star icon next to any hospital name on the UI writes that hospital's metadata directly to the local MongoDB `portfolio` collection. Selecting the **★ My Portfolio** tab reads and displays these bookmarked records dynamically. This UI synchronization perfectly bridges user action with agent-led database state updates in real-time.
+- **Dynamic Maps & Tables**: Agent outputs are parsed in real-time to update a synchronized Google Map with quality-color-coded pins and a comprehensive comparison table.
+- **Dynamic Out-of-Pocket Modeler**: An interactive selector bar models real-time, patient-specific deductibles and coinsurance rules (Original Medicare vs. Medigap Plan F/G/N) across search results.
+- **Live Freshness Badge**: Connects to MongoDB Atlas Change Streams to reflect live database updates (e.g., "Data updated 3 days ago").
+
+### 2. The Multi-Step Mission (Parallel Google ADK Orchestration)
+Instead of relying on single prompts, ClearPrice uses the **Google ADK (`@google/adk`)** to coordinate **5 specialized sub-agents** working in parallel:
+- **Phase 1 (Discovery)**: The `procedure_agent` (translating medical terms into DRG/APC codes via semantic search) and the `hospital_discovery_agent` (geospatial zip parsing) execute concurrently.
+- **Phase 2 (Pricing & Quality)**: The `price_intel_agent` (computing national medians and allowed payments), `quality_financial_agent` (retrieving CMS ratings and HCRIS charity care), and `provider_agent` (querying specialists) execute concurrently.
+- **Live Status Logging**: The frontend displays a real-time **Autonomous Multi-Agent Pipeline** visualizer, detailing each sub-agent's process step-by-step.
+
+### 3. Partner Power (MongoDB Atlas MCP Server)
+We built a custom, production-grade **Node/TypeScript MCP (Model Context Protocol) Server** as the domain layer between our agents and **MongoDB Atlas** (our participating partner). The MCP server exposes **14 semantic tools** leveraging advanced MongoDB features:
+- **Atlas Vector Search**: Semantic search on 768-dim embeddings (`textembedding-gecko@003`) to resolve natural language into DRG codes.
+- **Geospatial `$near` Query & 2dsphere Indexes**: Finds hospitals within custom radiuses.
+- **Advanced Aggregations**: Stage-based pipeline calculations for national medians (using MongoDB 7.0+ `$median` operator).
+- **TTL Indexes**: Auto-expiring session-privacy collections.
+
+---
+
 ## How It Works
 
 ```mermaid

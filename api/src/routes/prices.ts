@@ -80,21 +80,32 @@ pricesRoute.get('/compare', async (c) => {
       .project({ _id: 0, ccn: 1, name: 1, 'quality.cms_star_rating': 1, 'google.rating': 1 })
       .toArray()
     const hospitalMap = Object.fromEntries(hospitalDocs.map((h) => [h['ccn'], h]))
+    const priceMap = Object.fromEntries(prices.map((p) => [p['ccn'] as string, p]))
 
-    const enriched = prices.map((p) => {
-      const hospital = hospitalMap[p['ccn'] as string] ?? {}
-      const payment = (p['avg_medicare_payments'] as number) ?? (p['avg_medicare_allowed'] as number)
+    const enriched = hospital_ccns.map((ccn) => {
+      const hospital = hospitalMap[ccn]
+      if (!hospital) return null // Skip if ccn is invalid/not found
+      
+      const p = priceMap[ccn] || {}
+      const payment = p['avg_medicare_payments'] ?? p['avg_medicare_allowed'] ?? null
+
       return {
-        ...p,
-        hospital_name: (hospital as { name?: string })['name'] ?? 'Unknown',
-        cms_star_rating: (hospital as { quality?: { cms_star_rating?: number } })['quality']?.['cms_star_rating'] ?? null,
-        google_rating: (hospital as { google?: { rating?: number } })['google']?.['rating'] ?? null,
+        ccn,
+        hospital_name: hospital['name'] ?? 'Unknown',
+        avg_covered_charges: p['avg_covered_charges'] ?? null,
+        avg_medicare_payments: p['avg_medicare_payments'] ?? null,
+        avg_total_payments: p['avg_total_payments'] ?? null,
+        total_discharges: p['total_discharges'] ?? 0,
+        avg_medicare_allowed: p['avg_medicare_allowed'] ?? null,
+        total_services: p['total_services'] ?? 0,
+        cms_star_rating: hospital['quality']?.['cms_star_rating'] ?? null,
+        google_rating: hospital['google']?.['rating'] ?? null,
         national_median_payment: nationalMedian ? Math.round(nationalMedian) : null,
         pct_vs_national: nationalMedian && payment
           ? Math.round((payment / nationalMedian - 1) * 100)
           : null,
       }
-    })
+    }).filter(Boolean)
 
     return c.json({
       prices: enriched,

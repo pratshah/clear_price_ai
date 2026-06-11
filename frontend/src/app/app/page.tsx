@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import ChatInterface from '../../components/ChatInterface'
 import PriceTable, { HospitalPrice } from '../../components/PriceTable'
 import HospitalMap, { Hospital } from '../../components/HospitalMap'
@@ -10,7 +10,7 @@ import FreshnessBadge from '../../components/FreshnessBadge'
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080'
 const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''
 
-type Tab = 'map' | 'table' | 'insights'
+type Tab = 'map' | 'table' | 'insights' | 'portfolio'
 
 function extractLocation(text: string): string | null {
   // 5-digit zip takes priority
@@ -77,6 +77,38 @@ export default function HomePage() {
   // Buffer right-panel updates so they land at the same time as the chat response
   const pendingHospitalsRef = useRef<Hospital[] | null>(null)
   const pendingPriceRef = useRef<{ prices: HospitalPrice[]; meta: NonNullable<typeof pricesMeta>; proc: { code: string; type: string } } | null>(null)
+  const priceDataReceivedRef = useRef(false)
+
+  const [portfolio, setPortfolio] = useState<any[]>([])
+  const [loadingPortfolio, setLoadingPortfolio] = useState(false)
+
+  const fetchPortfolio = useCallback(async () => {
+    setLoadingPortfolio(true)
+    try {
+      const res = await fetch(`${API_URL}/api/portfolio`)
+      if (res.ok) {
+        const data = await res.json()
+        setPortfolio(data.portfolio || [])
+      }
+    } catch {} finally {
+      setLoadingPortfolio(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tab === 'portfolio') {
+      fetchPortfolio()
+    }
+  }, [tab, fetchPortfolio])
+
+  const deleteFromPortfolio = async (ccn: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/portfolio/${ccn}`, { method: 'DELETE' })
+      if (res.ok) {
+        setPortfolio((prev) => prev.filter((h) => h.ccn !== ccn))
+      }
+    } catch {}
+  }
 
   const flushPending = useCallback(() => {
     if (pendingHospitalsRef.current) {
@@ -143,6 +175,7 @@ export default function HomePage() {
     pendingHospitalsRef.current = null
     pendingPriceRef.current = null
     currentHospitalsRef.current = []
+    priceDataReceivedRef.current = false
     setHospitals([])
     setPrices([])
     setPricesMeta(null)
@@ -153,34 +186,51 @@ export default function HomePage() {
   const handlePriceData = useCallback((data: { ranked: any[]; procedures: any[] }) => {
     const proc = data.procedures[0]
     if (!proc) return
-    const priceRows: HospitalPrice[] = data.ranked
-      .filter((h) => h.avg_medicare_payments !== null)
-      .map((h) => ({
-        ccn: h.ccn,
-        hospital_name: h.name,
-        avg_covered_charges: h.avg_covered_charges ?? 0,
-        avg_medicare_payments: h.avg_medicare_payments,
-        avg_total_payments: h.avg_covered_charges ?? 0,
-        total_discharges: h.total_discharges ?? 0,
-        national_median_payment: h.national_median_payment,
-        pct_vs_national: h.pct_vs_national,
-        cms_star_rating: h.cms_star_rating,
-        google_rating: h.google_rating,
-      }))
+    const priceRows: HospitalPrice[] = data.ranked.map((h) => ({
+      ccn: h.ccn,
+      hospital_name: h.name,
+      avg_covered_charges: h.avg_covered_charges ?? null,
+      avg_medicare_payments: h.avg_medicare_payments ?? null,
+      avg_total_payments: h.avg_total_payments ?? null,
+      total_discharges: h.total_discharges ?? 0,
+      national_median_payment: h.national_median_payment,
+      pct_vs_national: h.pct_vs_national,
+      cms_star_rating: h.cms_star_rating,
+      google_rating: h.google_rating,
+    }))
     setPrices(priceRows)
     setPricesMeta({ procedure_code: proc.code, code_type: proc.code_type, national_median: data.ranked[0]?.national_median_payment ?? null })
     setInsightsProcedure({ code: proc.code, type: proc.code_type })
-    setHospitals(data.ranked.map((h) => ({
+    
+    const mappedHospitals = data.ranked.map((h) => ({
       ccn: h.ccn,
       name: h.name,
+      location: h.location,
+      address: h.address,
       distance_miles: h.distance_miles,
       quality: h.cms_star_rating != null ? { cms_star_rating: h.cms_star_rating } : undefined,
       google: h.google_rating != null ? { rating: h.google_rating } : undefined,
-    })))
+    }))
+    setHospitals(mappedHospitals)
     setTab('table')
+
+    // Since we successfully received rich, direct price data from the stream,
+    // update the refs and clear out any pending background search queries
+    currentHospitalsRef.current = mappedHospitals
+    pendingHospitalsRef.current = null
+    pendingPriceRef.current = null
+    priceDataReceivedRef.current = true
   }, [])
 
   const handleMessage = useCallback(async (content: string) => {
+    // If we've already handled the rich price data from the stream,
+    // do not trigger fallback queries to avoid overwriting or showing empty table
+    if (priceDataReceivedRef.current) {
+      pendingHospitalsRef.current = null
+      pendingPriceRef.current = null
+      return
+    }
+
     // 1. Resolve procedure code: explicit DRG/APC in response → keyword in user query → keyword in response
     const proc =
       extractExplicitCode(content) ??
@@ -242,7 +292,7 @@ export default function HomePage() {
         <div className="flex-1 flex flex-col overflow-hidden bg-white">
           {/* Tabs */}
           <div className="flex-shrink-0 border-b border-slate-200 px-4 flex items-center gap-1 pt-2">
-            {(['map', 'table', 'insights'] as Tab[]).map((t) => (
+            {(['map', 'table', 'insights', 'portfolio'] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -268,10 +318,14 @@ export default function HomePage() {
                       <span className="text-xs bg-brand text-white rounded-full px-1.5 py-0">{prices.length}</span>
                     )}
                   </span>
-                ) : (
+                ) : t === 'insights' ? (
                   <span className="flex items-center gap-1.5">
                     Insights
                     <span className="text-xs bg-green-100 text-green-700 rounded-full px-1.5 py-0">Atlas Charts</span>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 font-semibold text-amber-600">
+                    ★ My Portfolio
                   </span>
                 )}
               </button>
@@ -346,6 +400,66 @@ export default function HomePage() {
                 procedureCode={insightsProcedure?.code ?? null}
                 codeType={insightsProcedure?.type ?? null}
               />
+            )}
+
+            {tab === 'portfolio' && (
+              <div className="space-y-4 animate-fadeIn">
+                <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">My Saved Hospitals</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">Hospitals bookmarked from search results. Managed and stored in your MongoDB Atlas database.</p>
+                  </div>
+                  <button 
+                    onClick={fetchPortfolio} 
+                    className="text-xs text-brand hover:underline font-medium"
+                    disabled={loadingPortfolio}
+                  >
+                    {loadingPortfolio ? 'Refreshing...' : '↻ Refresh'}
+                  </button>
+                </div>
+                {portfolio.length === 0 ? (
+                  <div className="text-center py-16 text-slate-400">
+                    <span className="text-4xl block mb-2">☆</span>
+                    <p className="text-sm">You haven't saved any hospitals yet.</p>
+                    <p className="text-xs mt-1">Click the star button next to any hospital name in the Price Table to save it to your portfolio!</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {portfolio.map((h: any) => (
+                      <div key={h.ccn} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col justify-between hover:border-amber-300 transition-colors">
+                        <div>
+                          <div className="flex justify-between items-start gap-2">
+                            <h3 className="font-bold text-slate-800 text-sm leading-snug">{h.name}</h3>
+                            <button
+                              onClick={() => deleteFromPortfolio(h.ccn)}
+                              className="text-slate-400 hover:text-red-500 text-xs p-1 transition-colors"
+                              title="Delete from Portfolio"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                          <div className="text-xs text-slate-400 mt-1 font-mono">CCN {h.ccn} {h.state ? `· ${h.state}` : ''}</div>
+                          {h.address && <div className="text-xs text-slate-500 mt-1">{h.address}</div>}
+                        </div>
+                        <div className="flex items-center gap-3 mt-4 pt-3 border-t border-slate-100 text-xs">
+                          {h.cms_star_rating != null && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-amber-500 font-bold">★</span>
+                              <span className="text-slate-600 font-medium">CMS Star: {h.cms_star_rating}</span>
+                            </div>
+                          )}
+                          {h.google_rating != null && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-amber-500 font-bold">★</span>
+                              <span className="text-slate-600 font-medium">Google Rating: {h.google_rating}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

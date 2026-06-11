@@ -11,6 +11,7 @@ import { chatRoute } from './routes/chat.js'
 import { hospitalsRoute } from './routes/hospitals.js'
 import { pricesRoute } from './routes/prices.js'
 import { metaRoute } from './routes/meta.js'
+import { portfolioRoute } from './routes/portfolio.js'
 import { startChangeStreams } from './lib/changeStreams.js'
 
 const app = new Hono()
@@ -23,6 +24,7 @@ app.route('/api/chat', chatRoute)
 app.route('/api/hospitals', hospitalsRoute)
 app.route('/api/prices', pricesRoute)
 app.route('/api/meta', metaRoute)
+app.route('/api/portfolio', portfolioRoute)
 
 const port = Number(process.env['PORT'] ?? 8080)
 console.log(`API listening on port ${port}`)
